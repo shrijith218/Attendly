@@ -93,7 +93,7 @@
       // Clean symbology prefix (e.g., ]C1)
       const cleanedText = decodedText.replace(/^]C1/, '');
 
-      document.getElementById("result").innerText = cleanedText;
+      document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
 
       // Send to backend (replace with your deployed URL)
       fetch("https://proto1-4p67.onrender.com", {
