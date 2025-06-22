@@ -13,17 +13,21 @@
 
   <script>
     function onScanSuccess(decodedText, decodedResult) {
-      document.getElementById("result").innerText = decodedText;
+  // Remove symbology prefix like "]C1" if present
+  let cleanedText = decodedText.replace(/^]C1/, '');
 
-      fetch("https://proto1-4p67.onrender.com", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          barcode: decodedText,
-          time: new Date().toISOString()
-        }),
-      });
-    }
+  document.getElementById("result").innerText = cleanedText;
+
+  fetch("https://your-backend-url.com/scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      barcode: cleanedText,
+      time: new Date().toISOString()
+    }),
+  });
+}
+
 
     const html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess);
