@@ -97,7 +97,7 @@
       document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
 
       // Send to backend (replace with your deployed URL)
-      fetch("https://proto1-4p67.onrender.com", {
+      fetch("https://proto1-4p67.onrender.com/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
