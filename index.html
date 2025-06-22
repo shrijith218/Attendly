@@ -97,15 +97,21 @@
       document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
 
       // Send to backend (replace with your deployed URL)
-      fetch("https://proto1-4p67.onrender.com/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          barcode: cleanedText,
-          time: new Date().toISOString()
-        }),
-      });
-    }
+     fetch("https://proto1-4p67.onrender.com/scan", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    barcode: cleanedText,
+    time: new Date().toISOString()
+  }),
+})
+.then(res => res.json())
+.then(data => {
+  console.log("Response from server:", data);
+})
+.catch(err => {
+  console.error("Scan error:", err);
+});
 
     const html5QrCode = new Html5Qrcode("reader");
     html5QrCode.start(
