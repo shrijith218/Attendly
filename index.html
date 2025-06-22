@@ -92,6 +92,7 @@
     function onScanSuccess(decodedText, decodedResult) {
       // Clean symbology prefix (e.g., ]C1)
       const cleanedText = decodedText.replace(/^]C1/, '');
+      navigator.vibrate?.(200); // vibrate for 200ms if supported
 
       document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
 
