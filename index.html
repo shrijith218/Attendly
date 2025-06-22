@@ -15,7 +15,7 @@
     function onScanSuccess(decodedText, decodedResult) {
       document.getElementById("result").innerText = decodedText;
 
-      fetch("https://your-backend-url.com/scan", {
+      fetch("https://proto1-4p67.onrender.com", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
