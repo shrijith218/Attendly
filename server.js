@@ -1,7 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,71 +8,76 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-const dbPath = path.join(__dirname, 'db.sqlite');
-const db = new sqlite3.Database(dbPath);
+// ✅ Supabase setup
+const supabaseUrl = 'https://ieqlswwdfobuuahxyowh.supabase.co'; // Replace with your actual URL
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllcWxzd3dkZm9idXVhaHh5b3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1OTU2MTQsImV4cCI6MjA2NjE3MTYxNH0.kVfRidaDIH-uABmkbWf7yr0YlZmRkbtOuGFnN2KePFI';                   // Replace with your anon/public API key
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-// === Create master student table (if not exists) ===
-db.run(`CREATE TABLE IF NOT EXISTS students (
-  admission_number TEXT PRIMARY KEY,
-  name TEXT,
-  class_sec TEXT
-)`);
-
-// === Create attendance log table ===
-db.run(`CREATE TABLE IF NOT EXISTS attendance_log (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  admission_number TEXT,
-  name TEXT,
-  class_sec TEXT,
-  timestamp TEXT
-)`);
-
-// === Scan handler ===
-app.post('/scan', (req, res) => {
+// === POST /scan: Log scanned data ===
+app.post('/scan', async (req, res) => {
   const { barcode, time } = req.body;
 
   if (!barcode || !time) {
     return res.status(400).json({ error: "Missing barcode or time" });
   }
 
-  // barcode is admission_number
-  db.get(`SELECT * FROM students WHERE admission_number = ?`, [barcode], (err, student) => {
-    if (err) return res.status(500).json({ error: err.message });
+  try {
+    // 1. Get student from 'students'
+    const { data: student, error: fetchError } = await supabase
+      .from('students')
+      .select('*')
+      .eq('admission_number', barcode)
+      .single();
 
-    if (!student) {
+    if (fetchError || !student) {
       return res.status(404).json({ error: "Student not found" });
     }
 
-    // Log into attendance_log
-    db.run(`INSERT INTO attendance_log (admission_number, name, class_sec, timestamp)
-            VALUES (?, ?, ?, ?)`,
-      [student.admission_number, student.name, student.class_sec, time],
-      function (err) {
-        if (err) return res.status(500).json({ error: err.message });
+    // 2. Insert into 'attendance_log'
+    const { error: insertError } = await supabase
+      .from('attendance_log')
+      .insert({
+        admission_number: barcode,
+        name: student.name,
+        class_sec: student.class_sec,
+        timestamp: time
+      });
 
-        res.json({
-          success: true,
-          id: this.lastID,
-          student: {
-            admission_number: student.admission_number,
-            name: student.name,
-            class_sec: student.class_sec
-          }
-        });
+    if (insertError) {
+      return res.status(500).json({ error: insertError.message });
+    }
+
+    res.json({
+      success: true,
+      student: {
+        admission_number: student.admission_number,
+        name: student.name,
+        class_sec: student.class_sec
       }
-    );
-  });
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// === View attendance log ===
-app.get('/attendance', (req, res) => {
-  db.all(`SELECT * FROM attendance_log ORDER BY id DESC`, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+// === GET /attendance: View all logs ===
+app.get('/attendance', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('attendance_log')
+      .select('*')
+      .order('timestamp', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// === Start server ===
+// === Start the server ===
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ Supabase server running on port ${PORT}`);
 });
