@@ -32,13 +32,14 @@ app.post('/scan', async (req, res) => {
     }
 
     const { data: inserted, error: insertError } = await supabase
-      .from('attendance_log')
-      .insert({
-        admission_number: barcode,
-        name: student.name,
-        class_sec: student.class_sec,
-        timestamp: time
-      });
+  .from('attendance_log')
+  .insert({
+    admission_number: barcode,
+    name: student.name,
+    class_sec: student.class_sec,
+    timestamp: time
+  })
+  .select(); // ✅ This will return the inserted row
 
     console.log("📥 Supabase insert result:", inserted, "error:", insertError);
     if (insertError) return res.status(500).json({ error: insertError.message });
