@@ -39,6 +39,9 @@ app.post('/scan', async (req, res) => {
     class_sec: student.class_sec,
     timestamp: time
   })
+      console.log("📥 Inserted data:", inserted);
+      console.log("❌ Insert error:", insertError);
+
   .select(); // ✅ This will return the inserted row
 
     console.log("📥 Supabase insert result:", inserted, "error:", insertError);
