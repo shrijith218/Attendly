@@ -111,7 +111,7 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         barcode: cleanedText,
-        time: new Date().toISOString()
+        time: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
       }),
     })
     .then(res => res.json())
