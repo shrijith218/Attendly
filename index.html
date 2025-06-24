@@ -94,6 +94,25 @@
   let lastScanned = null;
   let isScanning = false;
 
+  function formatISTDateTime() {
+    const now = new Date();
+
+    const pad = (n) => n.toString().padStart(2, '0');
+
+    // Convert to IST manually (UTC + 5:30)
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    const ist = new Date(utc + 5.5 * 3600000);
+
+    const year = ist.getFullYear();
+    const month = pad(ist.getMonth() + 1);
+    const day = pad(ist.getDate());
+    const hour = pad(ist.getHours());
+    const minute = pad(ist.getMinutes());
+    const second = pad(ist.getSeconds());
+
+    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+  }
+
   function onScanSuccess(decodedText, decodedResult) {
     const cleanedText = decodedText.replace(/^]C1/, '');
 
@@ -105,13 +124,16 @@
     navigator.vibrate?.(200);
     document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
 
+    // ⏰ Correctly formatted timestamp
+    const formattedTime = formatISTDateTime();
+
     // Send scanned data to server
     fetch("https://proto1-4p67.onrender.com/scan", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         barcode: cleanedText,
-        time: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+        time: formattedTime  // ✅ ISO format for PostgreSQL
       }),
     })
     .then(res => res.json())
@@ -140,6 +162,7 @@
     console.error(err);
   });
 </script>
+
 
 </body>
 </html>
