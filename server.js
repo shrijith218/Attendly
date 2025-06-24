@@ -31,7 +31,7 @@ app.post('/scan', async (req, res) => {
       return res.status(404).json({ error: "Student not found" });
     }
 
-    const { data: inserted, error: insertError } = await supabase
+const { data: inserted, error: insertError } = await supabase
   .from('attendance_log')
   .insert({
     admission_number: barcode,
@@ -39,10 +39,11 @@ app.post('/scan', async (req, res) => {
     class_sec: student.class_sec,
     timestamp: time
   })
-      console.log("📥 Inserted data:", inserted);
-      console.log("❌ Insert error:", insertError);
+  .select();
 
-  .select(); // ✅ This will return the inserted row
+console.log("📥 Inserted data:", inserted);
+console.log("❌ Insert error:", insertError);
+// ✅ This will return the inserted row
 
     console.log("📥 Supabase insert result:", inserted, "error:", insertError);
     if (insertError) return res.status(500).json({ error: insertError.message });
