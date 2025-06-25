@@ -41,8 +41,13 @@ const { data: inserted, error: insertError } = await supabase
   })
   .select();
 
-console.log("📥 Inserted data:", inserted);
-console.log("❌ Insert error:", insertError);
+if (insertError) {
+  console.error("❌ Insert error:", insertError);
+  return res.status(500).json({ error: insertError.message });
+} else {
+  console.log("✅ Insert success:", inserted);
+}
+
 // ✅ This will return the inserted row
 
     console.log("📥 Supabase insert result:", inserted, "error:", insertError);
