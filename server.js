@@ -9,12 +9,11 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// ✅ Supabase setup
 const supabaseUrl = 'https://ieqlswwdfobuuahxyowh.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllcWxzd3dkZm9idXVhaHh5b3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1OTU2MTQsImV4cCI6MjA2NjE3MTYxNH0.kVfRidaDIH-uABmkbWf7yr0YlZmRkbtOuGFnN2KePFI'; // Keep secret keys out of public code
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllcWxzd3dkZm9idXVhaHh5b3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1OTU2MTQsImV4cCI6MjA2NjE3MTYxNH0.kVfRidaDIH-uABmkbWf7yr0YlZmRkbtOuGFnN2KePFI'; // Replace securely
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-// === POST /scan: Log scanned data ===
+// === POST /scan: Save attendance ===
 app.post('/scan', async (req, res) => {
   const { barcode, time } = req.body;
   if (!barcode || !time) return res.status(400).json({ error: "Missing barcode or time" });
@@ -31,28 +30,22 @@ app.post('/scan', async (req, res) => {
       return res.status(404).json({ error: "Student not found" });
     }
 
-const { data: inserted, error: insertError } = await supabase
-  .from('attendance_log')
-  .insert({
-    admission_number: barcode,
-    name: student.name,
-    class_sec: student.class_sec,
-    timestamp: time
-  })
-  .select();
+    const { data: inserted, error: insertError } = await supabase
+      .from('attendance_log')
+      .insert({
+        admission_number: barcode,
+        name: student.name,
+        class_sec: student.class_sec,
+        timestamp: time
+      })
+      .select();
 
-if (insertError) {
-  console.error("❌ Insert error:", insertError);
-  return res.status(500).json({ error: insertError.message });
-} else {
-  console.log("✅ Insert success:", inserted);
-}
+    if (insertError) {
+      console.error("❌ Insert error:", insertError);
+      return res.status(500).json({ error: insertError.message });
+    }
 
-// ✅ This will return the inserted row
-
-    console.log("📥 Supabase insert result:", inserted, "error:", insertError);
-    if (insertError) return res.status(500).json({ error: insertError.message });
-
+    console.log("✅ Insert success:", inserted);
     res.json({
       success: true,
       student: {
@@ -67,28 +60,22 @@ if (insertError) {
   }
 });
 
-// === GET /attendance: View logs ===
-app.get('/attendance', async (req, res) => {
-  const { data, error } = await supabase
-    .from('attendance_log')
-    .select('*')
-    .order('timestamp', { ascending: false });
-
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// === GET /download-excel: Download attendance as Excel ===
+// === GET /download-excel?date=YYYY-MM-DD ===
 app.get('/download-excel', async (req, res) => {
+  const date = req.query.date;
+  if (!date) return res.status(400).json({ error: "Missing ?date=YYYY-MM-DD" });
+
   const { data, error } = await supabase
     .from('attendance_log')
     .select('*')
+    .gte('timestamp', `${date}T00:00:00`)
+    .lt('timestamp', `${date}T23:59:59`)
     .order('timestamp', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
 
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Attendance Log');
+  const worksheet = workbook.addWorksheet(`Log ${date}`);
 
   worksheet.columns = [
     { header: 'Admission Number', key: 'admission_number', width: 20 },
@@ -99,15 +86,8 @@ app.get('/download-excel', async (req, res) => {
 
   data.forEach(row => worksheet.addRow(row));
 
-  res.setHeader(
-    'Content-Disposition',
-    'attachment; filename="attendance_log.xlsx"'
-  );
-  res.setHeader(
-    'Content-Type',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-  );
-
+  res.setHeader('Content-Disposition', `attachment; filename="attendance_log_${date}.xlsx"`);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   await workbook.xlsx.write(res);
   res.end();
 });
