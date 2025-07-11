@@ -70,6 +70,11 @@
       color: #2d3436;
       font-weight: bold;
     }
+
+    #datePicker, #downloadBtn {
+      margin-top: 10px;
+      padding: 8px 16px;
+    }
   </style>
 </head>
 <body>
@@ -84,85 +89,66 @@
       <div id="reader"></div>
     </div>
     <p>Result: <span id="result">Waiting...</span></p>
-    <a href="https://proto1-4p67.onrender.com/download-excel" target="_blank">
-  <button style="margin-top: 10px; padding: 8px 16px;">⬇️ Download Excel</button>
-</a>
 
+    <input type="date" id="datePicker" />
+    <button id="downloadBtn">⬇️ Download Excel</button>
   </div>
 
   <script>
-  let lastScanned = null;
-  let isScanning = false;
+    let lastScanned = null;
+    let isScanning = false;
 
-  function formatISTDateTime() {
-    const now = new Date();
+    function formatISTDateTime() {
+      const now = new Date();
+      const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+      const ist = new Date(utc + 5.5 * 3600000);
+      const pad = n => n.toString().padStart(2, '0');
+      return `${ist.getFullYear()}-${pad(ist.getMonth() + 1)}-${pad(ist.getDate())} ${pad(ist.getHours())}:${pad(ist.getMinutes())}:${pad(ist.getSeconds())}`;
+    }
 
-    const pad = (n) => n.toString().padStart(2, '0');
+    function onScanSuccess(decodedText, decodedResult) {
+      const cleanedText = decodedText.replace(/^]C1/, '');
+      if (isScanning || cleanedText === lastScanned) return;
+      isScanning = true;
+      lastScanned = cleanedText;
 
-    // Convert to IST manually (UTC + 5:30)
-    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-    const ist = new Date(utc + 5.5 * 3600000);
+      navigator.vibrate?.(200);
+      document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
+      const formattedTime = formatISTDateTime();
 
-    const year = ist.getFullYear();
-    const month = pad(ist.getMonth() + 1);
-    const day = pad(ist.getDate());
-    const hour = pad(ist.getHours());
-    const minute = pad(ist.getMinutes());
-    const second = pad(ist.getSeconds());
+      fetch("https://proto1-4p67.onrender.com/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ barcode: cleanedText, time: formattedTime }),
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log("Response from server:", data);
+      })
+      .catch(err => {
+        console.error("Scan error:", err);
+      })
+      .finally(() => {
+        setTimeout(() => { isScanning = false; }, 3000);
+      });
+    }
 
-    return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
-  }
-
-  function onScanSuccess(decodedText, decodedResult) {
-    const cleanedText = decodedText.replace(/^]C1/, '');
-
-    // ✅ Prevent repeated scans within 5 seconds
-    if (isScanning || cleanedText === lastScanned) return;
-    isScanning = true;
-    lastScanned = cleanedText;
-
-    navigator.vibrate?.(200);
-    document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
-
-    // ⏰ Correctly formatted timestamp
-    const formattedTime = formatISTDateTime();
-
-    // Send scanned data to server
-    fetch("https://proto1-4p67.onrender.com/scan", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        barcode: cleanedText,
-        time: formattedTime  // ✅ ISO format for PostgreSQL
-      }),
-    })
-    .then(res => res.json())
-    .then(data => {
-      console.log("Response from server:", data);
-    })
-    .catch(err => {
-      console.error("Scan error:", err);
-    })
-    .finally(() => {
-      // ⏱ Allow next scan after 3 seconds
-      setTimeout(() => {
-        isScanning = false;
-      }, 3000);
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("result").innerText = "❌ Camera access error: " + err;
+      console.error(err);
     });
-  }
 
-  // Start camera
-  const html5QrCode = new Html5Qrcode("reader");
-  html5QrCode.start(
-    { facingMode: "environment" },
-    { fps: 10, qrbox: { width: 250, height: 250 } },
-    onScanSuccess
-  ).catch(err => {
-    document.getElementById("result").innerText = "❌ Camera access error: " + err;
-    console.error(err);
-  });
-</script>
-
-
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const date = document.getElementById("datePicker").value;
+      if (!date) return alert("Please select a date.");
+      const url = `https://proto1-4p67.onrender.com/download-excel?date=${date}`;
+      window.open(url, "_blank");
+    });
+  </script>
 </body>
 </html>
