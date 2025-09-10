@@ -4,177 +4,205 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Attendly</title>
+
+  <!-- html5-qrcode -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <link rel="icon" href="Scanner Icon.png"/>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
 
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Segoe UI', Tahoma, sans-serif;
       background: #f8ba37;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    header img {
-      width: 200px;
-      display: block;
-      margin: 0 auto 10px;
-    }
-
-    .container {
-      background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      min-height: 100vh;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
       padding: 20px;
-      width: 90%;
-      max-width: 400px;
-      text-align: center;
     }
-
-    h2 {
-      margin-bottom: 1rem;
+    header { text-align: center; margin-bottom: 20px; }
+    header img { width: 200px; display: block; margin: 0 auto 10px; }
+    .container {
+      background: #fff; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.15);
+      padding: 20px; width: 100%; max-width: 420px; text-align: center;
     }
-
-    .video-wrapper {
-      width: 100%;
-      height: 300px;
-      background: #dfe6e9;
-      border-radius: 10px;
-      overflow: hidden;
-      position: relative;
-    }
-
-    #reader {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    #result {
-      margin-top: 15px;
-      color: #2d3436;
-      font-weight: bold;
-    }
-
-    #datePicker, #downloadBtn {
-      margin-top: 10px;
-      padding: 8px 16px;
-    }
+    .video-wrapper { width: 100%; height: 300px; background: #dfe6e9; border-radius: 10px; overflow: hidden; position: relative; }
+    #reader { position: absolute; width:100%; height:100%; left:0; top:0; object-fit: cover; }
+    #result { margin-top: 12px; color: #2d3436; font-weight: bold; }
+    .controls { margin-top: 12px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+    input[type="date"], input[type="number"], button { padding: 8px 12px; border-radius:6px; border:1px solid #ccc; }
+    .manual { margin-top: 18px; text-align:center; }
   </style>
 </head>
 <body>
-
   <header>
-    <img src="Scanner_logo.png" alt="Scanner Icon">
-    <h2>📷 Scan Your Barcode</h2>
+    <img src="Scanner_logo.png" alt="Scanner Icon" />
+    <h2>Attendly — Scan Your Barcode</h2>
   </header>
-   
+
   <div class="container">
     <div class="video-wrapper">
       <div id="reader"></div>
     </div>
-    
-     <!-- Manual Admission Number Entry -->
-  <div style="margin-top:20px;">
-    <h3>Manual Entry</h3>
-    <input type="number" id="manualAdmission" placeholder="Enter Admission Number" />
-    <button onclick="submitManual()">Submit</button>
-  </div>
-    
-    
-    <p>Result: <span id="result">Waiting...</span></p>
 
-    <input type="date" id="datePicker" />
-    <button id="downloadBtn">⬇️ Download Excel</button>
+    <div class="manual">
+      <h4>Manual Entry</h4>
+      <input type="number" id="manualAdmission" placeholder="Enter Admission Number" />
+      <button id="manualSubmit">Submit</button>
+    </div>
+
+    <p id="result">Result: <span id="resText">Waiting...</span></p>
+
+    <div class="controls">
+      <input type="date" id="datePicker" />
+      <button id="downloadBtn">⬇️ Download Excel</button>
+    </div>
   </div>
 
   <script>
+    // --- config ---
+    const BACKEND_URL = "https://proto1-4p67.onrender.com"; // change to your backend URL if different
+
+    // --- scanning state ---
+    let html5QrCode = null;
     let lastScanned = null;
     let isScanning = false;
 
+    // format datetime in IST (YYYY-MM-DD HH:MM:SS)
     function formatISTDateTime() {
       const now = new Date();
       const utc = now.getTime() + now.getTimezoneOffset() * 60000;
       const ist = new Date(utc + 5.5 * 3600000);
       const pad = n => n.toString().padStart(2, '0');
-      return `${ist.getFullYear()}-${pad(ist.getMonth() + 1)}-${pad(ist.getDate())} ${pad(ist.getHours())}:${pad(ist.getMinutes())}:${pad(ist.getSeconds())}`;
+      return `${ist.getFullYear()}-${pad(ist.getMonth()+1)}-${pad(ist.getDate())} ${pad(ist.getHours())}:${pad(ist.getMinutes())}:${pad(ist.getSeconds())}`;
     }
 
+    // Set result text helper
+    function setResult(text) {
+      document.getElementById('resText').innerText = text;
+    }
+
+    // Send log to backend. Accepts either barcode or admissionNumber
+    async function sendLog({ barcode, admissionNumber, time }) {
+      const payload = { time: time || formatISTDateTime() };
+      if (barcode) payload.barcode = String(barcode);
+      if (admissionNumber) payload.admissionNumber = String(admissionNumber);
+
+      try {
+        const res = await fetch(`${BACKEND_URL}/scan`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok && data?.success) {
+          setResult(`✅ Saved: ${data.student.name} (${data.student.admission_number})`);
+        } else if (data?.error) {
+          setResult(`❌ ${data.error}`);
+        } else if (data?.message) {
+          setResult(data.message);
+        } else {
+          setResult('❌ Unknown server response');
+        }
+      } catch (err) {
+        console.error("sendLog error:", err);
+        setResult("❌ Network or server error");
+      }
+    }
+
+    // Called on successful scan
     function onScanSuccess(decodedText, decodedResult) {
-      const cleanedText = decodedText.replace(/^]C1/, '');
+      const cleanedText = decodedText.replace(/^]C1/, '').trim();
+      // debounce duplicates
       if (isScanning || cleanedText === lastScanned) return;
       isScanning = true;
       lastScanned = cleanedText;
 
-      navigator.vibrate?.(200);
-      document.getElementById("result").innerText = "✅ " + cleanedText + " saved!";
+      navigator.vibrate?.(200); // feedback if supported
+      setResult(`Scanning... ${cleanedText}`);
+
       const formattedTime = formatISTDateTime();
+      sendLog({ barcode: cleanedText, time: formattedTime })
+        .finally(() => {
+          // allow next scan after short delay
+          setTimeout(() => { isScanning = false; }, 1200);
+        });
+    }
 
-      fetch("https://proto1-4p67.onrender.com/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ barcode: cleanedText, time: formattedTime }),
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Response from server:", data);
-      })
-      .catch(err => {
-        console.error("Scan error:", err);
-      })
- 
+    // Initialize camera (robust)
+    function startScanner() {
+      Html5Qrcode.getCameras().then(devices => {
+        if (!devices || devices.length === 0) {
+          setResult('❌ No camera devices found');
+          return;
+        }
 
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      onScanSuccess
-    ).catch(err => {
-      document.getElementById("result").innerText = "❌ Camera access error: " + err;
-      console.error(err);
-    });
+        // Prefer a rear/back camera if available
+        const rear = devices.find(d => /back|rear|environment|wide/i.test(d.label));
+        const cameraId = (rear && rear.id) || devices[0].id;
 
-      
-      // Manual entry submission
-    function submitManual() {
-      const admissionNumber = document.getElementById("manualAdmission").value;
+        // Create or reuse instance
+        if (html5QrCode) {
+          // already created; stop and restart
+          html5QrCode.stop().catch(()=>{}).finally(() => {
+            html5QrCode.clear().catch(()=>{});
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess, (err) => {
+              console.warn("QR error:", err);
+            }).catch(err => {
+              console.error("start error:", err);
+              setResult("❌ Camera start error: " + err);
+            });
+          });
+        } else {
+          html5QrCode = new Html5Qrcode("reader");
+          html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess, (err) => {
+            // optional per-frame error callback
+          }).catch(err => {
+            console.error("start error:", err);
+            setResult("❌ Camera start error: " + err);
+          });
+        }
+      }).catch(err => {
+        console.error("getCameras error:", err);
+        setResult("❌ Camera permission or detection error");
+      });
+    }
+
+    // Manual submit handler
+    document.getElementById('manualSubmit').addEventListener('click', () => {
+      const admissionNumber = document.getElementById('manualAdmission').value.trim();
       if (!admissionNumber) {
         alert("Please enter an admission number.");
         return;
       }
-      sendLog(admissionNumber);
-      document.getElementById("manualAdmission").value = ""; // clear input
-    }
-   .finally(() => {
-        setTimeout(() => { isScanning = false; }, 3000);
-      });
-    }
-    }
+      setResult('📥 Submitting manual entry...');
+      sendLog({ admissionNumber, time: formatISTDateTime() });
+      document.getElementById('manualAdmission').value = '';
+    });
+
+    // Download Excel button
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const date = document.getElementById('datePicker').value;
+      if (!date) { alert("Please select a date."); return; }
+      const url = `${BACKEND_URL}/download-excel?date=${encodeURIComponent(date)}`;
+      window.open(url, "_blank");
+    });
+
+    // Start on load
+    window.addEventListener('load', () => {
+      // Must be HTTPS or localhost for camera to work
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        // still attempt — but warn user
+        console.warn('Camera may be blocked without HTTPS');
+      }
+      startScanner();
+    });
+
+    // Clean up when leaving page
+    window.addEventListener('beforeunload', () => {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(()=>{}).finally(()=>{ html5QrCode.clear().catch(()=>{}); });
+      }
     });
   </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
