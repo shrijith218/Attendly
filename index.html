@@ -43,6 +43,12 @@
       max-width: 400px;
       text-align: center;
     }
+    
+    <div style="margin-top:20px;">
+    <h3>Manual Entry</h3>
+    <input type="number" id="manualAdmission" placeholder="Enter Admission Number" />
+    <button onclick="submitManual()">Submit</button>
+  </div>
 
     h2 {
       margin-bottom: 1rem;
@@ -149,10 +155,21 @@
       if (!date) return alert("Please select a date.");
       const url = `https://proto1-4p67.onrender.com/download-excel?date=${date}`;
       window.open(url, "_blank");
+
+       function submitManual() {
+      const admissionNumber = document.getElementById("manualAdmission").value;
+      if (!admissionNumber) {
+        alert("Please enter an admission number.");
+        return;
+      }
+      sendLog(admissionNumber);
+      document.getElementById("manualAdmission").value = ""; // clear input
+    }
     });
   </script>
 </body>
 </html>
+
 
 
 
