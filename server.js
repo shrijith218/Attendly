@@ -1,9 +1,10 @@
 // server.js
-
 const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const ExcelJS = require('exceljs');
+
+require('dotenv').config(); // if you use a .env locally
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -11,25 +12,26 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// ⚠️ Replace with environment variables in production
-const supabaseUrl = 'https://ieqlswwdfobuuahxyowh.supabase.co';
-const supabaseKey =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllcWxzd3dkZm9idXVhaHh5b3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1OTU2MTQsImV4cCI6MjA2NjE3MTYxNH0.kVfRidaDIH-uABmkbWf7yr0YlZmRkbtOuGFnN2KePFI';
+// Use environment variables (do NOT hardcode production keys)
+const supabaseUrl = process.env.SUPABASE_URL || 'https://ieqlswwdfobuuahxyowh.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || ''; // set in your Render/Env
+if (!supabaseKey) {
+  console.warn('⚠️ SUPABASE_KEY is not set. Set SUPABASE_KEY in environment variables.');
+}
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // === POST /scan: Save attendance (barcode OR manual entry) ===
 app.post('/scan', async (req, res) => {
-  const { barcode, admissionNumber, time } = req.body;
-  const admission = barcode || admissionNumber; // works for both scanned & manual
-
-  if (!admission || !time) {
-    return res
-      .status(400)
-      .json({ error: 'Missing admission number or time' });
-  }
-
   try {
-    // Fetch student record from Supabase
+    const { barcode, admissionNumber, time } = req.body;
+    const admission = (barcode || admissionNumber || '').toString().trim();
+    const timestamp = (time || new Date().toISOString()).toString();
+
+    if (!admission) {
+      return res.status(400).json({ error: 'Missing admission number (barcode or admissionNumber)' });
+    }
+
+    // Fetch student record
     const { data: student, error: fetchError } = await supabase
       .from('students')
       .select('*')
@@ -48,7 +50,7 @@ app.post('/scan', async (req, res) => {
         admission_number: admission,
         name: student.name,
         class_sec: student.class_sec,
-        timestamp: time,
+        timestamp: timestamp,
       })
       .select();
 
@@ -58,7 +60,7 @@ app.post('/scan', async (req, res) => {
     }
 
     console.log('✅ Insert success:', inserted);
-    res.json({
+    return res.json({
       success: true,
       student: {
         admission_number: student.admission_number,
@@ -67,47 +69,57 @@ app.post('/scan', async (req, res) => {
       },
     });
   } catch (err) {
-    console.log('❌ Server error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('❌ Server error:', err);
+    return res.status(500).json({ error: err.message || 'Server error' });
   }
 });
 
 // === GET /download-excel?date=YYYY-MM-DD ===
 app.get('/download-excel', async (req, res) => {
-  const date = req.query.date;
-  if (!date) return res.status(400).json({ error: "Missing ?date=YYYY-MM-DD" });
+  try {
+    const date = req.query.date;
+    if (!date) return res.status(400).json({ error: 'Missing ?date=YYYY-MM-DD' });
 
-  const { data, error } = await supabase
-    .from('attendance_log')
-    .select('*')
-    .gte('timestamp', `${date}T00:00:00`)
-    .lt('timestamp', `${date}T23:59:59`)
-    .order('timestamp', { ascending: false });
+    // Use template strings properly
+    const startIso = `${date}T00:00:00`;
+    const endIso = `${date}T23:59:59`;
 
-  if (error) return res.status(500).json({ error: error.message });
+    const { data, error } = await supabase
+      .from('attendance_log')
+      .select('*')
+      .gte('timestamp', startIso)
+      .lt('timestamp', endIso)
+      .order('timestamp', { ascending: false });
 
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet(`Log ${date}`);
+    if (error) {
+      console.error('❌ Supabase query error:', error);
+      return res.status(500).json({ error: error.message });
+    }
 
-  worksheet.columns = [
-    { header: 'Admission Number', key: 'admission_number', width: 20 },
-    { header: 'Name', key: 'name', width: 25 },
-    { header: 'Class/Section', key: 'class_sec', width: 15 },
-    { header: 'Timestamp', key: 'timestamp', width: 30 },
-  ];
+    // Build Excel file
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`Log ${date}`);
 
-  data.forEach(row => worksheet.addRow(row));
+    worksheet.columns = [
+      { header: 'Admission Number', key: 'admission_number', width: 20 },
+      { header: 'Name', key: 'name', width: 30 },
+      { header: 'Class/Section', key: 'class_sec', width: 18 },
+      { header: 'Timestamp', key: 'timestamp', width: 28 },
+    ];
 
-  res.setHeader('Content-Disposition', `attachment; filename="attendance_log_${date}.xlsx"`);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  await workbook.xlsx.write(res);
-  res.end();
+    if (Array.isArray(data)) data.forEach(row => worksheet.addRow(row));
+
+    res.setHeader('Content-Disposition', `attachment; filename="attendance_log_${date}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error('❌ download-excel error:', err);
+    res.status(500).json({ error: err.message || 'Server error' });
+  }
 });
 
-// === Start server ===
+// Start server
 app.listen(PORT, () => {
   console.log(`✅ Supabase server running on port ${PORT}`);
 });
-
-
-
