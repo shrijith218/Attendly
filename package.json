@@ -1,5 +1,5 @@
 {
-  "name": "barcode-attendance-server",
+  "name": "Attendly",
   "version": "1.0.0",
   "main": "server.js",
   
@@ -13,3 +13,4 @@
     "exceljs": "^4.3.0"
   }
 }
+
