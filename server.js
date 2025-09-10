@@ -14,10 +14,7 @@ app.use(express.json());
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
-if (!supabaseKey) {
-  console.warn('⚠️ SUPABASE_KEY is not set. Set SUPABASE_KEY in environment variables.');
-}
-const supabase = createClient(supabaseUrl, supabaseKey);
+
 
 // === POST /scan: Save attendance (barcode OR manual entry) ===
 app.post('/scan', async (req, res) => {
@@ -122,5 +119,6 @@ app.get('/download-excel', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Supabase server running on port ${PORT}`);
 });
+
 
 
