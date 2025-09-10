@@ -136,7 +136,20 @@
       .catch(err => {
         console.error("Scan error:", err);
       })
-       // Manual entry submission
+ 
+
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      onScanSuccess
+    ).catch(err => {
+      document.getElementById("result").innerText = "❌ Camera access error: " + err;
+      console.error(err);
+    });
+
+      
+      // Manual entry submission
     function submitManual() {
       const admissionNumber = document.getElementById("manualAdmission").value;
       if (!admissionNumber) {
@@ -150,22 +163,12 @@
         setTimeout(() => { isScanning = false; }, 3000);
       });
     }
-
-    const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      onScanSuccess
-    ).catch(err => {
-      document.getElementById("result").innerText = "❌ Camera access error: " + err;
-      console.error(err);
-    });
-
     }
     });
   </script>
 </body>
 </html>
+
 
 
 
