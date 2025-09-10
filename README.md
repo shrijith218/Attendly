@@ -29,13 +29,10 @@
 
 ## 📂 Project Structure
 ```
-barcode-attendance-system/
+Attendly/
 │
 ├── public/
 │   └── index.html        # Frontend scanner page
-│
-├── lib/
-│   └── supabaseClient.js # Supabase configuration
 │
 ├── server.js             # Express backend for attendance logging
 ├── package.json          # Node.js dependencies
