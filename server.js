@@ -14,7 +14,7 @@ app.use(express.json());
 
 // Use environment variables (do NOT hardcode production keys)
 const supabaseUrl = process.env.SUPABASE_URL || 'https://ieqlswwdfobuuahxyowh.supabase.co';
-const supabaseKey = process.env.SUPABASE_KEY || ''; // set in your Render/Env
+const supabaseKey = process.env.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImllcWxzd3dkZm9idXVhaHh5b3doIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTA1OTU2MTQsImV4cCI6MjA2NjE3MTYxNH0.kVfRidaDIH-uABmkbWf7yr0YlZmRkbtOuGFnN2KePFI'; // set in your Render/Env
 if (!supabaseKey) {
   console.warn('⚠️ SUPABASE_KEY is not set. Set SUPABASE_KEY in environment variables.');
 }
@@ -123,3 +123,4 @@ app.get('/download-excel', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Supabase server running on port ${PORT}`);
 });
+
