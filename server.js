@@ -15,11 +15,20 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Helper: Euclidean distance between two vectors
+function euclideanDistance(arr1, arr2) {
+  if (!arr1 || !arr2 || arr1.length !== arr2.length) return Number.MAX_VALUE;
+  let sum = 0;
+  for (let i = 0; i < arr1.length; i++) {
+    sum += Math.pow(arr1[i] - arr2[i], 2);
+  }
+  return Math.sqrt(sum);
+}
 
-// === POST /scan: Save attendance (barcode OR manual entry) ===
+// POST /scan: Save attendance with optional faceDescriptor verification
 app.post('/scan', async (req, res) => {
   try {
-    const { barcode, admissionNumber, time } = req.body;
+    const { barcode, admissionNumber, faceDescriptor, time } = req.body;
     const admission = (barcode || admissionNumber || '').toString().trim();
     const timestamp = (time || new Date().toISOString()).toString();
 
@@ -27,16 +36,25 @@ app.post('/scan', async (req, res) => {
       return res.status(400).json({ error: 'Missing admission number (barcode or admissionNumber)' });
     }
 
-    // Fetch student record
+    // Fetch student record including face descriptor column
     const { data: student, error: fetchError } = await supabase
       .from('students')
-      .select('*')
+      .select('*, face_descriptor') // face_descriptor stored as array/json
       .eq('admission_number', admission)
       .single();
 
     if (fetchError || !student) {
       console.log('❌ Student fetch error:', fetchError);
       return res.status(404).json({ error: 'Student not found' });
+    }
+
+    // Verify face descriptor if sent and stored
+    if (faceDescriptor && Array.isArray(faceDescriptor) && student.face_descriptor) {
+      const distance = euclideanDistance(faceDescriptor, student.face_descriptor);
+      const threshold = 0.5; // Tune this threshold as needed
+      if (distance > threshold) {
+        return res.status(403).json({ error: 'Face does not match student record' });
+      }
     }
 
     // Insert attendance log
@@ -70,13 +88,12 @@ app.post('/scan', async (req, res) => {
   }
 });
 
-// === GET /download-excel?date=YYYY-MM-DD ===
+// GET /download-excel?date=YYYY-MM-DD: Export attendance logs for the day
 app.get('/download-excel', async (req, res) => {
   try {
     const date = req.query.date;
     if (!date) return res.status(400).json({ error: 'Missing ?date=YYYY-MM-DD' });
 
-    // Use template strings properly
     const startIso = `${date}T00:00:00`;
     const endIso = `${date}T23:59:59`;
 
@@ -92,7 +109,6 @@ app.get('/download-excel', async (req, res) => {
       return res.status(500).json({ error: error.message });
     }
 
-    // Build Excel file
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(`Log ${date}`);
 
@@ -103,7 +119,9 @@ app.get('/download-excel', async (req, res) => {
       { header: 'Timestamp', key: 'timestamp', width: 28 },
     ];
 
-    if (Array.isArray(data)) data.forEach(row => worksheet.addRow(row));
+    if (Array.isArray(data)) {
+      data.forEach(row => worksheet.addRow(row));
+    }
 
     res.setHeader('Content-Disposition', `attachment; filename="attendance_log_${date}.xlsx"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -115,10 +133,7 @@ app.get('/download-excel', async (req, res) => {
   }
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`✅ Supabase server running on port ${PORT}`);
 });
-
-
 
