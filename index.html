@@ -5,8 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Attendly</title>
 
+  <!-- Barcode scanning library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
+
+  <!-- face-api.js library for face recognition -->
   <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+  
   <link rel="icon" href="Scanner Icon.png"/>
 
   <style>
@@ -51,7 +55,7 @@
       <div id="reader"></div>
     </div>
 
-    <!-- Video for face-api -->
+    <!-- Hidden video element for face-api.js -->
     <video id="faceVideo" autoplay muted></video>
 
     <div class="manual">
@@ -69,18 +73,16 @@
   </div>
 
   <script>
-    // --- config ---
-    const BACKEND_URL = "https://proto1-4p67.onrender.com"; // change to your backend URL if different
+    // --- Configuration ---
+    const BACKEND_URL = "http://localhost:3001"; // Change this to your backend URL if deployed
 
-    // --- scanning state ---
+    // --- State ---
     let html5QrCode = null;
     let lastScanned = null;
     let isScanning = false;
 
-    // face-api models path
     const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-
-    let faceVideo = document.getElementById('faceVideo');
+    const faceVideo = document.getElementById('faceVideo');
 
     // Load face-api models
     async function loadFaceModels() {
@@ -88,34 +90,30 @@
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
       console.log('✅ Face-api models loaded');
-      // Start webcam for face capture
-      startFaceVideo();
+      await startFaceVideo();
     }
 
-    // Start webcam for face capture
+    // Start face webcam
     async function startFaceVideo() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         faceVideo.srcObject = stream;
         faceVideo.style.display = 'block';
       } catch (err) {
-        console.error('❌ Face video error:', err);
+        console.error('❌ Face webcam error:', err);
         setResult('❌ Face webcam error or permission denied');
       }
     }
 
-    // Get face descriptor from video
+    // Get face descriptor from current video frame
     async function getFaceDescriptor() {
       if (faceVideo.readyState !== 4) return null;
-
       const detection = await faceapi.detectSingleFace(faceVideo, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-      if (!detection) {
-        return null;
-      }
+      if (!detection) return null;
       return detection.descriptor; // Float32Array
     }
 
-    // format datetime in IST (YYYY-MM-DD HH:MM:SS)
+    // Helper: format IST datetime string
     function formatISTDateTime() {
       const now = new Date();
       const utc = now.getTime() + now.getTimezoneOffset() * 60000;
@@ -124,17 +122,17 @@
       return `${ist.getFullYear()}-${pad(ist.getMonth()+1)}-${pad(ist.getDate())} ${pad(ist.getHours())}:${pad(ist.getMinutes())}:${pad(ist.getSeconds())}`;
     }
 
-    // Convert Float32Array to plain array for JSON serialization
+    // Convert Float32Array to JSON serializable array
     function descriptorToArray(descriptor) {
       return Array.from(descriptor);
     }
 
-    // Set result text helper
+    // Set result text
     function setResult(text) {
       document.getElementById('resText').innerText = text;
     }
 
-    // Send log to backend. Accepts barcode, admissionNumber, and faceDescriptor
+    // Send attendance log to backend
     async function sendLog({ barcode, admissionNumber, faceDescriptor, time }) {
       const payload = { time: time || formatISTDateTime() };
       if (barcode) payload.barcode = String(barcode);
@@ -163,35 +161,30 @@
       }
     }
 
-    // Called on successful barcode scan
+    // Barcode scan success callback
     async function onScanSuccess(decodedText, decodedResult) {
       const cleanedText = decodedText.replace(/^]C1/, '').trim();
-      // debounce duplicates
       if (isScanning || cleanedText === lastScanned) return;
       isScanning = true;
       lastScanned = cleanedText;
 
-      navigator.vibrate?.(200); // feedback if supported
+      navigator.vibrate?.(200);
       setResult(`Scanning... ${cleanedText}`);
 
-      // Get face descriptor from webcam
       const faceDescriptor = await getFaceDescriptor();
 
       const formattedTime = formatISTDateTime();
       sendLog({ barcode: cleanedText, faceDescriptor, time: formattedTime })
-        .finally(() => {
-          setTimeout(() => { isScanning = false; }, 1500);
-        });
+        .finally(() => { setTimeout(() => { isScanning = false; }, 1500); });
     }
 
-    // Initialize barcode scanner camera
+    // Start barcode scanner
     function startScanner() {
       Html5Qrcode.getCameras().then(devices => {
-        if (!devices || devices.length === 0) {
+        if (!devices?.length) {
           setResult('❌ No camera devices found');
           return;
         }
-
         const rear = devices.find(d => /back|rear|environment|wide/i.test(d.label));
         const cameraId = (rear && rear.id) || devices[0].id;
 
@@ -199,28 +192,20 @@
           html5QrCode.stop().catch(() => {}).finally(() => {
             html5QrCode.clear().catch(() => {});
             html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess, err => {
-              console.warn("QR error:", err);
-            }).catch(err => {
-              console.error("start error:", err);
-              setResult("❌ Camera start error: " + err);
-            });
+            html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess)
+              .catch(err => { setResult("❌ Camera start error: " + err); });
           });
         } else {
           html5QrCode = new Html5Qrcode("reader");
-          html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess, err => {})
-            .catch(err => {
-              console.error("start error:", err);
-              setResult("❌ Camera start error: " + err);
-            });
+          html5QrCode.start(cameraId, { fps: 10, qrbox: 250 }, onScanSuccess)
+            .catch(err => { setResult("❌ Camera start error: " + err); });
         }
       }).catch(err => {
-        console.error("getCameras error:", err);
         setResult("❌ Camera permission or detection error");
       });
     }
 
-    // Manual submit handler with face recognition
+    // Manual entry submit
     document.getElementById('manualSubmit').addEventListener('click', async () => {
       const admissionNumber = document.getElementById('manualAdmission').value.trim();
       if (!admissionNumber) {
@@ -229,10 +214,9 @@
       }
       setResult('📥 Capturing face and submitting manual entry...');
 
-      // Capture face descriptor
       const faceDescriptor = await getFaceDescriptor();
       if (!faceDescriptor) {
-        setResult('❌ No face detected. Please ensure face is visible to the camera.');
+        setResult('❌ No face detected. Please ensure your face is visible to the camera.');
         return;
       }
 
@@ -248,7 +232,7 @@
       window.open(url, "_blank");
     });
 
-    // Start all on load
+    // Initialization
     window.addEventListener('load', async () => {
       if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
         console.warn('Camera may be blocked without HTTPS');
@@ -257,7 +241,7 @@
       startScanner();
     });
 
-    // Cleanup on unload
+    // Cleanup
     window.addEventListener('beforeunload', () => {
       if (html5QrCode) {
         html5QrCode.stop().catch(() => {}).finally(() => { html5QrCode.clear().catch(() => {}); });
