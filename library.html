@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>Library Barcode Entry</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+  <h2>Scan Student ID</h2>
+  <div id="student-reader"></div>
+
+  <h2>Scan Book Barcode</h2>
+  <div id="book-reader"></div>
+
+  <script>
+    let studentId = "";
+
+    function onStudentScan(decodedText) {
+      studentId = decodedText;
+      alert("Student ID scanned: " + studentId);
+    }
+
+    function onBookScan(decodedText) {
+      if (studentId === "") {
+        alert("Scan student ID first");
+        return;
+      }
+      fetch('/api/borrow', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({student_id: studentId, book_code: decodedText})
+      })
+      .then(res => res.json())
+      .then(data => alert(data.message));
+    }
+
+    new Html5QrcodeScanner("student-reader", { fps: 10, qrbox: 250 }).render(onStudentScan);
+    new Html5QrcodeScanner("book-reader", { fps: 10, qrbox: 250 }).render(onBookScan);
+  </script>
+</body>
+</html>
