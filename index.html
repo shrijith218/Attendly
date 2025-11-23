@@ -7,9 +7,6 @@
 
   <!-- Barcode scanning library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
-
-  <!-- face-api.js library for face recognition -->
-  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
   
   <link rel="icon" href="Scanner Icon.png"/>
 
@@ -34,29 +31,18 @@
     .controls { margin-top: 12px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
     input[type="date"], input[type="number"], button { padding: 8px 12px; border-radius:6px; border:1px solid #ccc; }
     .manual { margin-top: 18px; text-align:center; }
-    #faceVideo {
-      display: none;
-      width: 320px;
-      height: 240px;
-      margin: 10px auto;
-      border: 2px solid #333;
-      border-radius: 10px;
-    }
   </style>
 </head>
 <body>
   <header>
     <img src="Scanner_logo.png" alt="Scanner Icon" />
-    <h2>Attendly — Scan Your Barcode or Face</h2>
+    <h2>Attendly — Scan Your Barcode</h2>
   </header>
 
   <div class="container">
     <div class="video-wrapper">
       <div id="reader"></div>
     </div>
-
-    <!-- Hidden video element for face-api.js -->
-    <video id="faceVideo" autoplay muted></video>
 
     <div class="manual">
       <h4>Manual Entry</h4>
@@ -81,38 +67,6 @@
     let lastScanned = null;
     let isScanning = false;
 
-    const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
-    const faceVideo = document.getElementById('faceVideo');
-
-    // Load face-api models
-    async function loadFaceModels() {
-      await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-      await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-      console.log('✅ Face-api models loaded');
-      await startFaceVideo();
-    }
-
-    // Start face webcam
-    async function startFaceVideo() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        faceVideo.srcObject = stream;
-        faceVideo.style.display = 'block';
-      } catch (err) {
-        console.error('❌ Face webcam error:', err);
-        setResult('❌ Face webcam error or permission denied');
-      }
-    }
-
-    // Get face descriptor from current video frame
-    async function getFaceDescriptor() {
-      if (faceVideo.readyState !== 4) return null;
-      const detection = await faceapi.detectSingleFace(faceVideo, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
-      if (!detection) return null;
-      return detection.descriptor; // Float32Array
-    }
-
     // Helper: format IST datetime string
     function formatISTDateTime() {
       const now = new Date();
@@ -122,22 +76,16 @@
       return `${ist.getFullYear()}-${pad(ist.getMonth()+1)}-${pad(ist.getDate())} ${pad(ist.getHours())}:${pad(ist.getMinutes())}:${pad(ist.getSeconds())}`;
     }
 
-    // Convert Float32Array to JSON serializable array
-    function descriptorToArray(descriptor) {
-      return Array.from(descriptor);
-    }
-
     // Set result text
     function setResult(text) {
       document.getElementById('resText').innerText = text;
     }
 
     // Send attendance log to backend
-    async function sendLog({ barcode, admissionNumber, faceDescriptor, time }) {
+    async function sendLog({ barcode, admissionNumber, time }) {
       const payload = { time: time || formatISTDateTime() };
       if (barcode) payload.barcode = String(barcode);
       if (admissionNumber) payload.admissionNumber = String(admissionNumber);
-      if (faceDescriptor) payload.faceDescriptor = descriptorToArray(faceDescriptor);
 
       try {
         const res = await fetch(`${BACKEND_URL}/scan`, {
@@ -171,10 +119,8 @@
       navigator.vibrate?.(200);
       setResult(`Scanning... ${cleanedText}`);
 
-      const faceDescriptor = await getFaceDescriptor();
-
       const formattedTime = formatISTDateTime();
-      sendLog({ barcode: cleanedText, faceDescriptor, time: formattedTime })
+      sendLog({ barcode: cleanedText, time: formattedTime })
         .finally(() => { setTimeout(() => { isScanning = false; }, 1500); });
     }
 
@@ -212,15 +158,9 @@
         alert("Please enter an admission number.");
         return;
       }
-      setResult('📥 Capturing face and submitting manual entry...');
+      setResult('📥 Submitting manual entry...');
 
-      const faceDescriptor = await getFaceDescriptor();
-      if (!faceDescriptor) {
-        setResult('❌ No face detected. Please ensure your face is visible to the camera.');
-        return;
-      }
-
-      sendLog({ admissionNumber, faceDescriptor, time: formatISTDateTime() });
+      sendLog({ admissionNumber, time: formatISTDateTime() });
       document.getElementById('manualAdmission').value = '';
     });
 
@@ -237,7 +177,6 @@
       if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
         console.warn('Camera may be blocked without HTTPS');
       }
-      await loadFaceModels();
       startScanner();
     });
 
@@ -245,9 +184,6 @@
     window.addEventListener('beforeunload', () => {
       if (html5QrCode) {
         html5QrCode.stop().catch(() => {}).finally(() => { html5QrCode.clear().catch(() => {}); });
-      }
-      if (faceVideo.srcObject) {
-        faceVideo.srcObject.getTracks().forEach(track => track.stop());
       }
     });
   </script>
